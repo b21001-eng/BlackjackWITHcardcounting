@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blackjack Hi-Low Strategy Lab</title>
+    <style>
+        :root {
+            --bg-dark: #0b0f17;       
+            --board-green: #34d399;   
+            --card-space: #a7f3d0;
+            --text-light: #f8fafc;
+            --text-dark: #1e293b;
+            --accent-yellow: #fef08a; 
+            --card-red: #f87171;
+            --emerald-deck: #047857; /* 카드 뒷면: 세련되고 진한 초록색 */
+        }
+
+        body {
+            margin: 0; padding: 0;
+            font-family: 'Malgun Gothic', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-light);
+            display: flex; height: 100vh; overflow: hidden;
+        }
+
+        /* ---------------- [레이아웃 설계] ---------------- */
+        .sidebar-left {
+            width: 260px; background-color: var(--bg-dark);
+            border-right: 1px solid #1e293b; padding: 20px;
+            display: flex; flex-direction: column; gap: 20px; box-sizing: border-box;
+        }
+
+        .main-play-zone {
+            flex: 1; background-color: var(--board-green);
+            border: 8px solid #059669; border-radius: 20px; margin: 15px;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.1);
+            display: flex; flex-direction: column; justify-content: space-between;
+            align-items: center; padding: 25px; box-sizing: border-box; position: relative;
+        }
+
+        .sidebar-right {
+            width: 320px; background-color: var(--bg-dark);
+            border-left: 1px solid #1e293b; padding: 20px;
+            display: flex; flex-direction: column; box-sizing: border-box;
+        }
+
+        /* ---------------- [UI 컴포넌트] ---------------- */
+        .bubble-guide {
+            background-color: var(--accent-yellow); color: var(--text-dark);
+            padding: 15px 20px; border-radius: 15px; font-size: 14px; font-weight: bold;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; width: 85%; border: 2px solid #facc15;
+        }
+
+        .odds-container {
+            width: 90%; background: rgba(255,255,255,0.95); padding: 12px;
+            border-radius: 30px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; color: var(--text-dark);
+        }
+        .odds-bar { display: flex; height: 16px; background-color: #e2e8f0; border-radius: 8px; overflow: hidden; margin-top: 8px; }
+
+        /* 실물 카드 스펙 */
+        .poker-card {
+            width: 75px !important; height: 115px !important;
+            min-width: 75px !important; max-width: 75px !important;
+            background: white; color: black; border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15); display: flex;
+            flex-direction: column; justify-content: space-between; padding: 8px;
+            box-sizing: border-box; font-weight: bold; font-size: 20px; border: 2px solid #cbd5e1;
+        }
+        .poker-card.red { color: var(--card-red); }
+        
+        /* 고급스러운 진한 초록색 깔끔한 뒷면 디자인 */
+        .poker-card.hidden-card {
+            background: linear-gradient(135deg, var(--emerald-deck) 0%, #064e3b 100%);
+            border: 2px solid #022c22;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.4), 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        .card-flex-wrap {
+            display: flex; gap: 10px; margin-top: 5px; min-height: 125px; width: 380px;
+            justify-content: center; align-content: flex-start; flex-wrap: wrap;
+            background: var(--card-space); border-radius: 10px; padding: 8px; box-sizing: border-box;
+        }
+
+        .grid-13 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+        .count-item {
+            background: #1f2937; border: 1px solid #374151; border-radius: 6px;
+            padding: 10px 4px; text-align: center; font-size: 13px; cursor: pointer; user-select: none;
+        }
+        .count-item:hover { background: #4b5563; }
+
+        .btn-group { display: flex; justify-content: center; align-items: center; gap: 15px; flex-wrap: wrap; margin-top: 12px; }
+        .cute-btn {
+            background-color: #3b82f6; color: white; border: none; padding: 10px 20px;
+            font-weight: bold; border-radius: 20px; cursor: pointer; box-shadow: 0 3px 0 #2563eb; white-space: nowrap;
+        }
+        .cute-btn:active { transform: translateY(3px); box-shadow: none; }
+        .cute-btn:disabled { background-color: #94a3b8 !important; box-shadow: 0 3px 0 #64748b !important; cursor: not-allowed; transform: none !important; }
+        
+        .mode-switch { background-color: #ef4444; box-shadow: 0 3px 0 #dc2626; }
+        .reset-btn { background-color: #6b7280; box-shadow: 0 3px 0 #4b5563; margin-top: 10px; }
+
+        /* 실전 베팅 조작 대시보드 */
+        #bet-zone {
+            display: none; background: white; padding: 12px; border-radius: 12px;
+            text-align: center; border: 2px solid #fbbf24; color: var(--text-dark);
+        }
+        .chip-group { display: flex; justify-content: center; gap: 5px; margin-top: 8px; }
+        .chip-btn {
+            background: #1e293b; color: white; border: none; padding: 6px 12px;
+            font-size: 11px; font-weight: bold; border-radius: 10px; cursor: pointer;
+        }
+        .chip-btn:disabled { background: #cbd5e1 !important; color: #94a3b8 !important; cursor: not-allowed; }
+        .chip-btn.active { background: #f59e0b; color: black; box-shadow: 0 0 5px rgba(0,0,0,0.3); }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar-left">
+        <h2 style="font-size: 18px; margin: 0; color: white;">⚙️ 실험실 옵션</h2>
+        <div>
+            <label style="font-size: 13px; font-weight: bold; color: #9ca3af;">덱 세트 수</label>
+            <select id="deck-select" onchange="resetDeck()" style="width: 100%; padding: 8px; margin-top: 5px; border-radius: 6px; background:#1f2937; color:white; border:1px solid #374151;">
+                <option value="2">2 세트 덱 (104장)</option>
+                <option value="4">4 세트 덱 (208장)</option>
+                <option value="6">6 세트 덱 (312장)</option>
+            </select>
+        </div>
+
+        <button class="cute-btn reset-btn" onclick="resetDeck()">🔄 덱 상태 초기화</button>
+
+        <hr style="border: 0; border-top: 1px solid #1e293b; margin: 5px 0;">
+
+        <button class="cute-btn mode-switch" id="toggle-bet-btn" onclick="toggleBetMode()">💰 실전 베팅 모드 켜기</button>
+        
+        <div id="bet-zone">
+            <p style="margin: 3px 0; font-size: 14px;">보유 자산: <strong style="color:#059669;">$<span id="my-money">100</span></strong></p>
+            <p style="margin: 3px 0; font-size: 12px; color:#64748b;">이번 판 베팅액: <strong style="color:#b45309;">$<span id="current-bet-ui">10</span></strong></p>
+            
+            <div class="chip-group">
+                <button id="chip-1" class="chip-btn active" onclick="selectBetMultiplier(1)">기본($10)</button>
+                <button id="chip-2" class="chip-btn" onclick="selectBetMultiplier(2)">2배($20)</button>
+                <button id="chip-3" class="chip-btn" onclick="selectBetMultiplier(3)">3배($30)</button>
+            </div>
+            <p id="bet-result" style="margin: 8px 0 0 0; font-size: 13px; font-weight:bold; color:#ef4444;"></p>
+        </div>
+    </div>
+
+    <div class="main-play-zone">
+        
+        <div class="odds-container">
+            <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: bold;">
+                <span style="color: #2563eb;">내 예상 승률: <span id="p-odds">50%</span></span>
+                <span style="color: #ef4444;">딜러 예상 승률: <span id="d-odds">50%</span></span>
+            </div>
+            <div class="odds-bar">
+                <div id="p-bar" style="width: 50%; background-color: #3b82f6; transition: width 0.3s;"></div>
+                <div id="d-bar" style="width: 50%; background-color: #f87171; transition: width 0.3s;"></div>
+            </div>
+        </div>
+
+        <div style="width: 100%; display: flex; flex-direction: column; gap: 15px; align-items: center;">
+            <div style="text-align: center;">
+                <span style="background: rgba(0,0,0,0.3); padding: 3px 12px; border-radius: 10px; font-size: 11px; color: white; font-weight: bold;">딜러 오픈 점수: <span id="d-score">0</span></span>
+                <div id="dealer-cards" class="card-flex-wrap"></div>
+            </div>
+            <div style="text-align: center;">
+                <span style="background: rgba(0,0,0,0.3); padding: 3px 12px; border-radius: 10px; font-size: 11px; color: white; font-weight: bold;">나의 카드 총합: <span id="p-score">0</span></span>
+                <div id="player-cards" class="card-flex-wrap"></div>
+            </div>
+        </div>
+
+        <div class="bubble-guide">
+            <div id="bubble-text">반가워요! 버튼을 눌러 카드를 하나씩 받으며 계산법을 알아봐요.</div>
+            <div class="btn-group" id="action-btn-container">
+                <button class="cute-btn" style="background-color: #10b981; box-shadow: 0 3px 0 #059669;" id="main-action-btn" onclick="handleTutorial()">첫 번째 카드 받기 ▷</button>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="sidebar-right">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h3 style="margin: 0; font-size: 16px; color: white;">📊 카드 카운터</h3>
+            <button id="auto-btn" class="cute-btn" style="padding: 4px 10px; margin:0; font-size: 11px; background:#4b5563; box-shadow: 0 2px 0 #1f2937;" onclick="toggleAutoCount()">추적: ON</button>
+        </div>
+        
+        <div style="background: #111827; padding: 10px; border-radius: 8px; margin-top: 8px; font-size: 12px; border: 1px dashed #374151;">
+            💡 <strong>Hi-Low 전략 스코어:</strong> <span id="hi-low-text" style="color: #facc15; font-weight:bold;">0 (평형)</span><br>
+            <span style="color:#9ca3af; font-size:11px;">+수치가 높을수록 큰 카드가 대량 잔존하므로 선베팅 칩 단계를 올리세요!</span>
+        </div>
+        
+        <div class="grid-13" id="counting-grid"></div>
+    </div>
+
+    <script>
+        let step = 0;
+        let isBetMode = false;
+        let isAutoCount = true;
+        let wallet = 100;
+        let betMultiplier = 1; 
+        let isGameRunning = false; 
+        
+        let playerHand = [];
+        let dealerHand = [];
+        let dealerHiddenCard = null; 
+        let currentDeck = [];
+        let cardHistory = {};
+        let hiLowCount = 0; 
+
+        const suits = ['♠', '♥', '♣', '♦'];
+        const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+        
+        // 카운터 보드 및 메모리 완전 무결 초기화 함수
+        function initCounterBoard() {
+            const grid = document.getElementById('counting-grid');
+            grid.innerHTML = "";
+            hiLowCount = 0;
+            updateHiLowUI();
+            ranks.forEach(r => {
+                cardHistory[r] = 0; // 메모리 0으로 완벽 초기화
+                let div = document.createElement('div');
+                div.className = 'count-item';
+                div.id = `counter-${r}`;
+                div.innerText = `${r}: 0회`;
+                
+                div.onclick = () => {
+                    if (!isAutoCount) {
+                        cardHistory[r]++;
+                        div.innerText = `${r}: ${cardHistory[r]}회`;
+                        trackHiLow(r);
+                        calculateLiveOdds();
+                    }
+                };
+                grid.appendChild(div);
+            });
+        }
+
+        function trackHiLow(rank) {
+            if(['2','3','4','5','6'].includes(rank)) hiLowCount++;
+            else if(['10','J','Q','K','A'].includes(rank)) hiLowCount--;
+            updateHiLowUI();
+        }
+
+        function updateHiLowUI() {
+            let status = " (평형)";
+            if(hiLowCount > 2) status = " (🔥 플레이어 유리! 선베팅 올리기 추천)";
+            if(hiLowCount < -2) status = " (❄️ 딜러 유리! 기본베팅 유지 권장)";
+            document.getElementById('hi-low-text').innerText = `${hiLowCount}${status}`;
+        }
+
+        function selectBetMultiplier(multiplier) {
+            if (!isBetMode || isGameRunning) return; // 게임 도중 베팅 조작 원천 불허
+            betMultiplier = multiplier;
+            document.getElementById('chip-1').classList.remove('active');
+            document.getElementById('chip-2').classList.remove('active');
+            document.getElementById('chip-3').classList.remove('active');
+            document.getElementById(`chip-${multiplier}`).classList.add('active');
+            document.getElementById('current-bet-ui').innerText = multiplier * 10;
+        }
+
+        function toggleChipButtons(disable) {
+            document.getElementById('chip-1').disabled = disable;
+            document.getElementById('chip-2').disabled = disable;
+            document.getElementById('chip-3').disabled = disable;
+        }
+
+        function calculateScore(hand) {
+            let score = 0; let aces = 0;
+            hand.forEach(card => {
+                let r = card.rank;
+                if (['J', 'Q', 'K'].includes(r)) score += 10;
+                else if (r === 'A') { score += 11; aces++; }
+                else score += parseInt(r);
+            });
+            while (score > 21 && aces > 0) { score -= 10; aces--; }
+            return score;
+        }
+
+        /* [핵심 버그 수정] 기존 메모리 및 오염된 덱 상태 완벽 박멸 */
+        function resetDeck() {
+            initCounterBoard(); // 카드 유출 기록 메모리 완전 초기화 (0회로 환원)
+            isGameRunning = false;
+            toggleChipButtons(false); // 잠금 버튼 해제
+            playerHand = []; dealerHand = []; dealerHiddenCard = null;
+            document.getElementById('player-cards').innerHTML = "";
+            document.getElementById('dealer-cards').innerHTML = "";
+            document.getElementById('p-score').innerText = "0";
+            document.getElementById('d-score').innerText = "0";
+            document.getElementById('bet-result').innerText = "";
+            
+            let numDecks = parseInt(document.getElementById('deck-select').value);
+            currentDeck = []; // 완전히 비운 뒤 덱 개수만큼만 새로 생성
+            for (let i = 0; i < numDecks; i++) {
+                suits.forEach(s => { ranks.forEach(r => { currentDeck.push({ rank: r, suit: s }); }); });
+            }
+            
+            // 피셔-예이츠 셔플로 카드 순서 무작위화
+            for (let i = currentDeck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [currentDeck[i], currentDeck[currentDeck[j]]] = [currentDeck[j], currentDeck[i]];
+            }
+            updateOdds(50, 50);
+            if(step >= 5) {
+                document.getElementById('bubble-text').innerText = "덱이 깨끗하게 재생성되었습니다. 베팅액 설정 후 [새 게임 분배]를 누르세요.";
+                restoreMainPlayButtons();
+            }
+        }
+
+        function renderCard(cardObj, targetId, isHidden = false) {
+            const zone = document.getElementById(targetId);
+            let div = document.createElement('div');
+            
+            if(isHidden) {
+                div.className = 'poker-card hidden-card';
+                div.id = 'dealer-hole-card-ui';
+            } else {
+                div.className = 'poker-card';
+                let isRed = (cardObj.suit === '♥' || cardObj.suit === '♦');
+                if(isRed) div.classList.add('red');
+                div.innerHTML = `<div>${cardObj.rank}</div><div style="align-self: flex-end; font-size: 24px;">${cardObj.suit}</div>`;
+                
+                if (isAutoCount) {
+                    cardHistory[cardObj.rank]++;
+                    document.getElementById(`counter-${cardObj.rank}`).innerText = `${cardObj.rank}: ${cardHistory[cardObj.rank]}회`;
+                    trackHiLow(cardObj.rank);
+                    calculateLiveOdds();
+                }
+            }
+            zone.appendChild(div);
+        }
+
+        /* [수정] 튜토리얼 내부 카드 주입 로직 제거 및 바로 실전 모드로 진입하도록 구조 통합 */
+        function handleTutorial() {
+            const txt = document.getElementById('bubble-text');
+            txt.innerHTML = "튜토리얼이 완료되었습니다! 실전 베팅을 켜고 우측의 하이로우 스코어를 관찰해 보세요.";
+            step = 5;
+            resetDeck();
+        }
+
+        function restoreMainPlayButtons() {
+            const container = document.getElementById('action-btn-container');
+            container.innerHTML = `
+                <button class="cute-btn" style="background-color: #10b981; box-shadow: 0 3px 0 #059669;" onclick="startMainGameRound()">🃏 새 게임 분배</button>
+                <button class="cute-btn" id="hit-btn" style="background-color: #3b82f6; box-shadow: 0 3px 0 #2563eb;" onclick="playerHit()" disabled>➕ 카드 받기(Hit)</button>
+                <button class="cute-btn" id="stay-btn" style="background-color: #f59e0b; box-shadow: 0 3px 0 #d97706;" onclick="playerStay()" disabled>🛑 그만 받기(Stay)</button>
+            `;
+        }
+
+        function startMainGameRound() {
+            let requiredBet = 10 * betMultiplier;
+            if (isBetMode && wallet < requiredBet) {
+                alert(`잔액($${wallet})이 부족하여 선베팅($${requiredBet})을 할 수 없습니다. $100로 자산을 충전합니다.`);
+                wallet = 100;
+                document.getElementById('my-money').innerText = wallet;
+                return;
+            }
+
+            isGameRunning = true; 
+            toggleChipButtons(true); // 베팅칩 버튼 하드락 (게임 도중 조작 방지)
+
+            playerHand = []; dealerHand = []; dealerHiddenCard = null;
+            document.getElementById('player-cards').innerHTML = "";
+            document.getElementById('dealer-cards').innerHTML = "";
+            document.getElementById('bet-result').innerText = "";
+
+            if(currentDeck.length < 15) { alert("덱이 거의 다 소모되었습니다. 카드를 새로 셔플합니다."); resetDeck(); return; }
+
+            // 딜러 1장 오픈
+            let d1 = currentDeck.pop(); dealerHand.push(d1);
+            renderCard(d1, 'dealer-cards', false);
+            document.getElementById('d-score').innerText = calculateScore(dealerHand);
+
+            // 딜러 히든 카드
+            dealerHiddenCard = currentDeck.pop();
+            dealerHand.push(dealerHiddenCard);
+            renderCard(dealerHiddenCard, 'dealer-cards', true); 
+
+            // 플레이어 초기 2장 분배 (pop 메서드를 사용해 덱에서 완전 소멸)
+            let p1 = currentDeck.pop(); let p2 = currentDeck.pop();
+            playerHand.push(p1, p2); renderCard(p1, 'player-cards'); renderCard(p2, 'player-cards');
+
+            let pScore = calculateScore(playerHand);
+            document.getElementById('p-score').innerText = pScore;
+
+            document.getElementById('hit-btn').disabled = false;
+            document.getElementById('stay-btn').disabled = false;
+
+            if (pScore === 21) {
+                document.getElementById('bubble-text').innerText = "축하합니다! 블랙잭입니다!";
+                playerStay();
+            } else {
+                document.getElementById('bubble-text').innerText = "카드를 더 받을지(Hit) 결정하세요.";
+            }
+        }
+
+        function playerHit() {
+            let card = currentDeck.pop(); playerHand.push(card); renderCard(card, 'player-cards');
+            let score = calculateScore(playerHand); document.getElementById('p-score').innerText = score;
+
+            if(score > 21) {
+                document.getElementById('bubble-text').innerHTML = `버스트(${score}점)로 <strong style="color:var(--card-red)">패배</strong>하였습니다.`;
+                revealDealerHoleCard(); 
+                endRoundCleanup("LOSE");
+            }
+        }
+
+        function playerStay() {
+            document.getElementById('hit-btn').disabled = true;
+            document.getElementById('stay-btn').disabled = true;
+
+            revealDealerHoleCard();
+
+            let pScore = calculateScore(playerHand); let dScore = calculateScore(dealerHand);
+
+            while(dScore < 17 && currentDeck.length > 0) {
+                let card = currentDeck.pop(); dealerHand.push(card);
+                renderCard(card, 'dealer-cards', false);
+                dScore = calculateScore(dealerHand);
+            }
+            document.getElementById('d-score').innerText = dScore;
+
+            let txt = document.getElementById('bubble-text');
+            if(dScore > 21) { txt.innerHTML = `딜러 버스트(${dScore}점)! 승리하셨습니다!`; endRoundCleanup("WIN"); }
+            else if(pScore > dScore) { txt.innerHTML = `내 점수(${pScore})가 딜러(${dScore})보다 높아 승리했습니다!`; endRoundCleanup("WIN"); }
+            else if(pScore < dScore) { txt.innerHTML = `딜러 점수(${dScore})가 내 점수(${pScore})보다 높아 패배했습니다.`; endRoundCleanup("LOSE"); }
+            else { txt.innerHTML = `동점(${pScore}점)으로 비겼습니다(Push).`; endRoundCleanup("PUSH"); }
+        }
+
+        function revealDealerHoleCard() {
+            const holeCardUi = document.getElementById('dealer-hole-card-ui');
+            if(holeCardUi && dealerHiddenCard) {
+                holeCardUi.className = 'poker-card';
+                let isRed = (dealerHiddenCard.suit === '♥' || dealerHiddenCard.suit === '♦');
+                if(isRed) holeCardUi.classList.add('red');
+                holeCardUi.innerHTML = `<div>${dealerHiddenCard.rank}</div><div style="align-self: flex-end; font-size: 24px;">${dealerHiddenCard.suit}</div>`;
+                holeCardUi.removeAttribute('id'); 
+
+                if (isAutoCount) {
+                    cardHistory[dealerHiddenCard.rank]++;
+                    document.getElementById(`counter-${dealerHiddenCard.rank}`).innerText = `${dealerHiddenCard.rank}: ${cardHistory[dealerHiddenCard.rank]}회`;
+                    trackHiLow(dealerHiddenCard.rank);
+                    calculateLiveOdds();
+                }
+            }
+            document.getElementById('d-score').innerText = calculateScore(dealerHand);
+        }
+
+        /* [핵심 수정] 승리/패배/무승부 어떤 루트를 타도 칩 잠금 상태가 원상 복구되도록 설계 */
+        function endRoundCleanup(result) {
+            document.getElementById('hit-btn').disabled = true; 
+            document.getElementById('stay-btn').disabled = true;
+            
+            isGameRunning = false; // 이제 완전히 정해진 한 판이 끝났음을 마킹
+            toggleChipButtons(false); // 잠금 버튼 완전 해제
+
+            if (isBetMode) {
+                const resText = document.getElementById('bet-result');
+                let baseBetValue = 10 * betMultiplier; 
+                let isBlackjack = (playerHand.length === 2 && calculateScore(playerHand) === 21);
+                
+                if (result === "WIN") {
+                    if(isBlackjack) { 
+                        let winAmt = Math.round(baseBetValue * 1.5);
+                        wallet += winAmt; 
+                        resText.innerText = `블랙잭 달성! (+$${winAmt})`; 
+                    } else { 
+                        wallet += baseBetValue; 
+                        resText.innerText = `승리! (+$${baseBetValue})`; 
+                    }
+                    resText.style.color = "#059669";
+                } else if (result === "LOSE") {
+                    wallet -= baseBetValue; 
+                    resText.innerText = `패배... (-$${baseBetValue})`; 
+                    resText.style.color = "#ef4444";
+                } else {
+                    resText.innerText = "무승부 (자산 보존)"; 
+                    resText.style.color = "#6b7280";
+                }
+                document.getElementById('my-money').innerText = wallet;
+            }
+        }
+
+        function toggleAutoCount() {
+            isAutoCount = !isAutoCount; const btn = document.getElementById('auto-btn');
+            if(isAutoCount) { btn.innerText = "추적: ON"; btn.style.background = "#4b5563"; calculateLiveOdds(); }
+            else { btn.innerText = "추적: OFF"; btn.style.background = "#ef4444"; }
+        }
+
+        function calculateLiveOdds() {
+            let totalRemoved = 0; let tenRemoved = 0;
+            for(let r in cardHistory) {
+                totalRemoved += cardHistory[r];
+                if(['10', 'J', 'Q', 'K'].includes(r)) { tenRemoved += cardHistory[r]; }
+            }
+            let decks = parseInt(document.getElementById('deck-select').value);
+            let totalCards = decks * 52; let totalTens = decks * 16;
+            let remainingCards = totalCards - totalRemoved; let remainingTens = totalTens - tenRemoved;
+            if(remainingCards <= 0) return;
+
+            let tenRatio = remainingTens / remainingCards;
+            let baseOdds = 45 + (tenRatio - 0.30) * 120; 
+            if(baseOdds > 95) baseOdds = 95; if(baseOdds < 5) baseOdds = 5;
+
+            let p = Math.round(baseOdds); updateOdds(p, 100 - p);
+        }
+
+        function updateOdds(p, d) {
+            document.getElementById('p-odds').innerText = p + "%"; document.getElementById('d-odds').innerText = d + "%";
+            document.getElementById('p-bar').style.width = p + "%"; document.getElementById('d-bar').style.width = d + "%";
+        }
+
+        function toggleBetMode() {
+            isBetMode = !isBetMode;
+            const bZone = document.getElementById('bet-zone'); const bBtn = document.getElementById('toggle-bet-btn');
+            if(isBetMode) { bZone.style.display = "block"; bBtn.innerText = "🔒 베팅 모드 끄기"; bBtn.style.background = "#4b5563"; }
+            else { bZone.style.display = "none"; bBtn.innerText = "💰 실전 베팅 모드 켜기"; bBtn.style.background = "#ef4444"; }
+        }
+
+        // 초기 시작
+        initCounterBoard();
+    </script>
+</body>
+</html>
